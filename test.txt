@@ -1,0 +1,127 @@
+
+/*
+    Encoding 4: iiiiiiii xxxxxyyy yyzzzzzw wwwwSS00
+    Encoding 3: iiiiiiii xxxxxyyy yyIIIIII IIssss00
+    Encoding 2: iiiiiiii xxxxxIII IIIIIIII IIIII000
+    Encoding 1: iiiiiiii 000ccccI IIIIIIII IIIIIII0 (unused, encoding 2 used instead)
+
+    mov r2, r1 -> add.u r2, r0, r1
+    li r5, i16 -> add.u r5, r0, i16
+
+    iiiii -> 5-bit instruction
+    xxxxx -> 5-bit reg
+    yyyyy -> 5-bit reg
+    zzzzz -> 5-bit reg
+    xxxxx -> 5-bit reg
+
+    iiiiixxx xxyyyyyz zzzzwwww wSSMM0mm
+    10101000 01000101 00101010 11110010
+    11010000 01000100 00000000 01011000
+
+    load.l r1, [r2+0x3ff]
+
+    add.u r1, r0, r2
+    iiiiixxx xxyyyyyz zzzzwwww w-------
+    iiiiixxx xxyyyyyz zzzzwwww w0OOOOIS
+    iiiiixxx xxMMMMMM MMMMMMMM MMOOOOIS
+    
+
+    0000 -> add
+    0001 -> sub
+    0010 -> mul
+    0011 -> mla
+    0100 -> div
+    0101 -> and
+    0110 -> or
+    0111 -> xor
+    1000 -> lsl
+    1001 -> lsr
+    1010 -> asr
+    1011 -> sx.b
+    1100 -> sx.s
+    1101 -> mod
+    1110 -> xch
+    1111 -> not
+
+    00000000 01000000 00100000 00000000
+    0   0    4   0    2   0    0   0
+    00       40       20       00
+    00204000
+    add.u r1, r0, r2
+   
+    sx.s r1, r1
+
+    
+
+    OO.S r5, r4, r3
+    
+    00111000 01000000 00100000 0
+
+    add, sub, mul, div
+
+
+
+    Opcode  Mnemonic        Operands         Enc Example
+    0xfd    lui             r0, 0xabcd       2   lui     r5, 0xbeef
+    0xfc    load.{b,s,l,x}  r0, [r1+r2*i5]   4   load.b  r3, [r6+r19*23]
+    0xfb    load.{b,s,l,x}  r0, [r1+r2:i5]   4   load.b  r3, [r6+r19:23]
+    0xfa    load.{b,s,l,x}  r0, [r1+i10]     4   load.b  r3, [r6+21]
+    0xf9    load.{b,s,l,x}  r0, [r1-i10]     4   load.b  r3, [r6-21]
+    0xf8    store.{b,s,l,x} [r1+r2*i5], r0   4   store.b [r6+r24*4], r6
+    0xf7    store.{b,s,l,x} [r1+r2:i5], r0   4   store.b [r6+r24:4], r6
+    0xf6    store.{b,s,l,x} [r1+i10], r0     4   store.b [r6+21], r6
+    0xf5    store.{b,s,l,x} [r1-i10], r0     4   store.b [r6-21], r6
+    0xf4    lea             r0, [r1+r2*i5]   4   lea     r3, [r6+r19*23]
+    0xf3    lea             r0, [r1+r2:i5]   4   lea     r3, [r6+r19:23]
+    0xef    addu            r0, r1, r2       4   addu    r5, r7, r12
+    0xee    addu            r0, r1, i8       3   addu    r5, r7, 0xab
+    0xed    addu            r0, i16          2   addu    r5, 0xdead
+    0xec    adds            r0, r1, i8       3   adds    r5, r7, 0xab
+    0xeb    adds            r0, i16          2   adds    r5, 0xdead
+    0xea    subu            r0, r1, r2       4   subu    r5, r7, r12
+    0xe9    subu            r0, r1, i8       3   subu    r5, r7, 0xab
+    0xe8    subu            r0, i16          2   subu    r5, 0xdead
+    0xe7    subs            r0, r1, i8       3   subs    r5, r7, 0xab
+    0xe6    subs            r0, i16          2   subs    r5, 0xdead
+    0xe5    mulu            r0, r1, r2       4   mulu    r5, r7, r12
+    0xe4    mulu            r0, r1, i8       3   mulu    r5, r7, 0xab
+    0xe3    mulu            r0, i16          2   mulu    r5, 0xdead
+    0xe2    muls            r0, r1, i8       3   muls    r5, r7, 0xab
+    0xe1    muls            r0, i16          2   muls    r5, 0xdead
+    0xe0    divu            r0, r1, r2       4   divu    r5, r7, r12
+    0xdf    divu            r0, r1, i8       3   divu    r5, r7, 0xab
+    0xde    divu            r0, i16          2   divu    r5, 0xdead
+    0xdd    divs            r0, r1, i8       3   divs    r5, r7, 0xab
+    0xdc    divs            r0, i16          2   divs    r5, 0xdead
+    0xcf    and             r0, r1, r2       4   and     r5, r7, r12
+    0xce    and             r0, r1, i8       3   and     r5, r7, 0xab
+    0xcd    and             r0, i16          2   and     5, 0xdead
+    0xcc    or              r0, r1, r2       4   or      r5, r7, r12
+    0xcb    or              r0, r1, i8       3   or      r5, r7, 0xab
+    0xca    or              r0, i16          2   or      5, 0xdead
+    0xc9    xor             r0, r1, r2       4   xor     r5, r7, r12
+    0xc8    xor             r0, r1, i8       3   xor     r5, r7, 0xab
+    0xc7    xor             r0, i16          2   xor     5, 0xdead
+    0xc6    not             r0, r1           4   not     r5, r7
+    0xc5    neg             r0, r1           4   neg     r5, r7
+    0xc4    sext.{b,s,l}    r0, r1           4   sext.s  r6, r25
+    0xc3    zext.{b,s,l}    r0, r1           4   zext.b  r6, r25
+    0xbc    lsl             r0, i16          2   lsl     r5, 0xdead
+    0xba    lsr             r0, i16          2   lsr     r5, 0xdead
+    0xb6    asr             r0, i16          2   asr     r5, 0xdead
+    0xaf    bcc.s           i16              2   beq.s   0x1000
+    0xae    bcc.u           i16              2   bgt.u   0x2000
+    0xad    jalcc           i16              2   jaleq   0x3000
+    0xac    jalcc           [r0+r1*i5]       4   jalne   [r5+r1*4]
+    0xab    jalcc           [r0+r1:i5]       4   jalgt   [r6+r15:8]
+    0xaa    callcc          i16              2   callhi  0x4000
+    0xa9    callcc          [r0+r1*i5]       4   calleq  [r5+r1*4]
+    0xa8    callcc          [r0+r1:i5]       4   callne  [r6+r15:8]
+    0xa7    rtlcc                            4   rtlgt
+    0xa6    retcc                            4   retne
+    0x9f    push            {r0-r1}          4   push    {r6, r6}
+    0x9e    pop             {r0-r1}          4   pop     {r6, r6}
+    0x9d    push            r0               4   push    r7
+    0x9c    pop             r0               4   pop     r21
+    0x8f    nop                              4   nop
+*/

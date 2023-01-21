@@ -1,0 +1,24 @@
+cpex 4, 0x0103ad (CU tlbiv)
+
+COP0 = SEC
+COP1 = VU0
+COP2 = VU1
+COP3 = CU
+COP4 = MMU
+
+Memory 80000000-bfffffff
+text section 80000000-9fffffff
+
+xor.u    r1, r1, r1
+mtcr     4, 0, r1
+mtcr     4, 1, r1
+li       r1, 0x80000000
+mtcr     4, 2, r1
+li       r1, 0x10000
+mtcr     4, 3, r1
+
+0 -> Map select
+1 -> Map N Virtual Base
+2 -> Map N Physical Base
+3 -> Map N Size
+4 -> Map N Attributes
