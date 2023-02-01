@@ -1,3 +1,5 @@
+#include "log.hpp"
+
 /*
 Hyrisc v2 ISA specification:
 
@@ -254,6 +256,7 @@ struct hyrisc_t {
 #define HY_CAUSE_MMU_PROT_WRITE  5
 #define HY_CAUSE_MMU_PROT_EXEC   6
 #define HY_CAUSE_ILLEGAL_INSTR   7
+#define HY_CAUSE_INVALID_COPX    8
 
 #define MMU_ATTR_READ  1
 #define MMU_ATTR_WRITE 2
@@ -353,7 +356,7 @@ inline uint32_t hyrisc_d_brn_i    (uint32_t opc) { return (opc      ) & 0x1; }
 inline uint32_t hyrisc_d_brn_imm16(uint32_t opc) { return (opc >>  1) & 0xffff; }
 inline uint32_t hyrisc_d_brn_l    (uint32_t opc) { return (opc      ) & 0x1; }
 inline uint32_t hyrisc_d_cpe_copr (uint32_t opc) { return (opc >> 12) & 0x3ff; }
-inline uint32_t hyrisc_d_cpe_copn (uint32_t opc) { return (opc >>  7) & 0x1f; }
+inline uint32_t hyrisc_d_cpe_copn (uint32_t opc) { return (opc >>  8) & 0x1f; }
 inline uint32_t hyrisc_d_cpe_op   (uint32_t opc) { return (opc      ) & 0x1f; }
 inline uint32_t hyrisc_d_cpi_opc  (uint32_t opc) { return (opc >>  4) & 0xffffff; }
 inline uint32_t hyrisc_d_sys_imm24(uint32_t opc) { return (opc      ) & 0xffffff; }
@@ -443,13 +446,22 @@ uint32_t* get_cop_register(hyrisc_t* cpu, uint32_t copn, uint32_t copr) {
 void cpe_mtcr(hyrisc_t* cpu, uint32_t copn, uint32_t cpur, uint32_t copr) {
     uint32_t* cr = get_cop_register(cpu, copn, copr);
 
-    *cr = cpu->r[cpur];
+    if (!cr) {
+        hyrisc_exception(cpu, HY_CAUSE_INVALID_COPX);
+    } else {
+        *cr = cpu->r[cpur];
+    }
+
 }
 
 void cpe_mfcr(hyrisc_t* cpu, uint32_t copn, uint32_t cpur, uint32_t copr) {
     uint32_t* cr = get_cop_register(cpu, copn, copr);
-
-    cpu->r[cpur] = *cr;
+    
+    if (!cr) {
+        hyrisc_exception(cpu, HY_CAUSE_INVALID_COPX);
+    } else {
+        cpu->r[cpur] = *cr;
+    }
 }
 
 hyrisc_alu_op_t hyrisc_alu_op_table[] = {
@@ -476,6 +488,12 @@ inline uint32_t sign_extend16_if(uint32_t v, bool cond) {
     v &= 0xffff;
     
     return (v & 0x8000) ? (v | 0xffff0000) : v;
+}
+
+inline uint32_t sign_extend17(uint32_t v) {
+    v &= 0x1ffff;
+
+    return (v & 0x10000) ? (v | 0xfffe0000) : v;
 }
 
 void hyrisc_execute(hyrisc_t* cpu) {
@@ -520,13 +538,13 @@ void hyrisc_execute(hyrisc_t* cpu) {
             uint32_t s0 = hyrisc_d_s0(opcode);
 
             if (hyrisc_cond_table[cond](cpu->r[d], cpu->r[s0])) {
-                uint32_t imm = hyrisc_d_brn_imm16(opcode);
+                uint32_t imm = hyrisc_d_brn_imm16(opcode) | ((instr & 0x10) << 12);
 
-                // Link
+                // Copy PC to LR
                 if (hyrisc_d_brn_l(opcode))
                     cpu->r[30] = cpu->r[31];
 
-                cpu->r[31] += sign_extend16_if(imm, instr & 0x10);
+                cpu->r[31] += sign_extend17(imm);
             }
         } break;
 
@@ -604,7 +622,9 @@ void hyrisc_execute(hyrisc_t* cpu) {
             uint32_t d = hyrisc_d_d(opcode);
             uint32_t s0 = hyrisc_d_s0(opcode);
 
-            switch (hyrisc_d_lsl_mode(opcode)) {
+            uint32_t mode = hyrisc_d_lsl_mode(opcode);
+
+            switch (mode) {
                 // Add scaled register
                 case 0b000: {
                     uint32_t s1 = hyrisc_d_s1(opcode);
@@ -638,17 +658,17 @@ void hyrisc_execute(hyrisc_t* cpu) {
                 } break;
 
                 // Add fixed
-                case 0b100: {
-                    uint32_t imm10 = hyrisc_d_lsl_imm10(opcode);
+                case 0b100: case 0b110: {
+                    uint32_t imm11 = hyrisc_d_lsl_imm10(opcode) | ((mode & 2) << 9);
 
-                    addr = cpu->r[s0] + imm10;
+                    addr = cpu->r[s0] + imm11;
                 } break;
 
                 // Sub fixed
-                case 0b101: {
-                    uint32_t imm10 = hyrisc_d_lsl_imm10(opcode);
+                case 0b101: case 0b111: {
+                    uint32_t imm11 = hyrisc_d_lsl_imm10(opcode) | ((mode & 2) << 9);
 
-                    addr = cpu->r[s0] - imm10;
+                    addr = cpu->r[s0] - imm11;
                 } break;
             }
 
@@ -708,25 +728,35 @@ void hyrisc_cycle(hyrisc_t* cpu) {
     hyrisc_execute(cpu);
 }
 
-#include "log.hpp"
-
 int main() {
     hyrisc_t* cpu = hyrisc_create();
 
     hyrisc_init(cpu);
 
-    // add.u    r1, 0x0002
-    // add.u    r2, r0, r1
-    // xor.s    r1, 0xffff
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[1], cpu->r[2]);
-    cpu->pipeline[2] = 0x00400083;
-    hyrisc_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[1], cpu->r[2]);
-    cpu->pipeline[2] = 0x00801fc0;
-    hyrisc_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[1], cpu->r[2]);
-    cpu->pipeline[2] = 0x007fffe3;
-    hyrisc_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[1], cpu->r[2]);
+    // li.u     x0, 0x80000000
+    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
 
+    cpu->pipeline[2] = 0x88f7ab50;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
+
+    cpu->pipeline[2] = 0x00efbbde;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
+
+    cpu->pipeline[2] = 0x00c0043a;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
+    
+    cpu->pipeline[2] = 0x00c0023a;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
+
+    cpu->pipeline[2] = 0x00c0043a;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
+    
+    cpu->pipeline[2] = 0x00c0023a;
+    hyrisc_execute(cpu);
+    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
 }

@@ -1,25 +1,25 @@
-Hyrisc v2 ISA specification:
+Hyrisc v2 ISA specification, revision 1:
 
 5 MSBs hold instruction/instruction group.
 
 00000 -> ALU register/ALU Immediate
-00010 -> beq.u/bleq.u rs0, rs1, imm
-00100 -> bne.u/blne.u rs0, rs1, imm
-00110 -> bgt.u/blgt.u rs0, rs1, imm
-01000 -> bge.u/blge.u rs0, rs1, imm
-01010 -> blt.u/bllt.u rs0, rs1, imm
-01100 -> ble.u/blle.u rs0, rs1, imm
+00010 -> beq/bleq rs0, rs1, imm (MSB 0)
+00100 -> bne/blne rs0, rs1, imm (MSB 0)
+00110 -> bgt/blgt rs0, rs1, imm (MSB 0)
+01000 -> bge/blge rs0, rs1, imm (MSB 0)
+01010 -> blt/bllt rs0, rs1, imm (MSB 0)
+01100 -> ble/blle rs0, rs1, imm (MSB 0)
 01101 -> Branch register
 01110 -> Coprocessor-CPU exchange
 01111 -> System
 10000 -> Load/Store/LEA (various modes)
 10001 -> Load immediate
-10010 -> beq.s/bleq.s rs0, rs1, imm
-10100 -> bne.s/blne.s rs0, rs1, imm
-10110 -> bgt.s/blgt.s rs0, rs1, imm
-11000 -> bge.s/blge.s rs0, rs1, imm
-11010 -> blt.s/bllt.s rs0, rs1, imm
-11100 -> ble.s/blle.s rs0, rs1, imm
+10010 -> beq/bleq rs0, rs1, imm (MSB 1)
+10100 -> bne/blne rs0, rs1, imm (MSB 1)
+10110 -> bgt/blgt rs0, rs1, imm (MSB 1)
+11000 -> bge/blge rs0, rs1, imm (MSB 1)
+11010 -> blt/bllt rs0, rs1, imm (MSB 1)
+11100 -> ble/blle rs0, rs1, imm (MSB 1)
 11110 -> Coprocessor instruction
 11111 -> Coprocessor instruction
 10011 -> seq.u/seq.s rs0, rs1, imm
@@ -64,7 +64,7 @@ iiiiixxx xxIIIIII IIIIIIII IIOOOOMS (Immediate)
                                       1111 -> ror
 
 Sccc0 -> Branch immediate:
-Sccc0xxx xxyyyyyI IIIIIIII IIIIIIIL
+Iccc0xxx xxyyyyyI IIIIIIII IIIIIIIL
 ||                                +-> 0 -> b
 ||                                    1 -> bl
 ||
@@ -75,8 +75,7 @@ Sccc0xxx xxyyyyyI IIIIIIII IIIIIIIL
 |                                     101 -> lt
 |                                     110 -> le
 |
-+-----------------------------------> 0 -> Sign extend immediate
-                                      1 -> No immediate sign extension
++-----------------------------------> Immediate MSB
 
 01101 -> Branch register:
 01101xxx xxyyyyyz zzzzwwww wIIIccci
@@ -116,9 +115,10 @@ iiiiixxx xxyyyyyz zzzzwwww wSSOOmmm (Register)
                             | |      001 -> Sub scaled register
                             | |      010 -> Add shifted register
                             | |      011 -> Sub shifted register
-                            | |      100 -> Add Fixed
-                            | |      101 -> Sub Fixed
-                            | |      110-111 -> Reserved
+                            | |      100 -> Add Fixed (MSB 0)
+                            | |      101 -> Sub Fixed (MSB 0)
+                            | |      110 -> Add Fixed (MSB 1)
+                            | |      111 -> Sub Fixed (MSB 1)
                             | |
                             | +----> 00 -> load
                             |        01 -> store
