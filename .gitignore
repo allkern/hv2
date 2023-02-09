@@ -1,4 +1,5 @@
 .vscode/
 elfio/
+bin/
 *.hs
 *.elf
