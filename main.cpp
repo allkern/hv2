@@ -594,31 +594,4 @@ int main() {
     hv2_t* cpu = hv2_create();
 
     hv2_init(cpu);
-
-    // li.u     x0, 0x80000000
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
-
-    cpu->pipeline[2] = 0x88f7ab50;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
-
-    cpu->pipeline[2] = 0x00efbbde;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x", cpu->r[3], cpu->r[2]);
-
-    cpu->pipeline[2] = 0x00c0043a;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
-    
-    cpu->pipeline[2] = 0x00c0023a;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
-
-    cpu->pipeline[2] = 0x00c0043a;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
-    
-    cpu->pipeline[2] = 0x00c0023a;
-    hv2_execute(cpu);
-    _log(debug, "r1=%08x, r2=%08x, cop0_cr0=%08x", cpu->r[3], cpu->r[2], cpu->cop0_cr0);
 }
