@@ -1,5 +1,12 @@
 .vscode/
+build-win32/
+build-linux/
 elfio/
+sdl2/
+sdl2-linux/
+imgui/
 bin/
 *.hs
 *.elf
+*.s
+*.bin

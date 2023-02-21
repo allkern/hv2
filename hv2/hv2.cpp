@@ -1,170 +1,8 @@
-#include "log.hpp"
+#include "hv2.hpp"
+#include "exception.hpp"
 
-#include <cstdint>
-#include <cstring>
-
-#define HV2_PIPELINE_SIZE 3
-
-#define HV2_COP0_CR0_XSTACKED_ISR    0x00000001
-#define HV2_COP0_CR0_XFLUSH_ON_IRQ   0x00000002
-#define HV2_COP0_CR0_XSTALL_ACCESS   0x00000004
-
-struct hv2_mmu_entry_t {
-    uint32_t paddr;
-    uint32_t vaddr;
-    uint32_t size;
-    uint32_t attr;
-};
-
-struct hv2_range_t {
-    uint32_t start, end;
-};
-
-class hv2_mmio_device_t {
-public:
-    virtual hv2_range_t get_physical_range() = 0;
-    virtual uint32_t read(uint32_t, int) = 0;
-    virtual void write(uint32_t, uint32_t, int) = 0;
-};
-
-#include <vector>
-
-struct hv2_t {
-    uint32_t r[32] = { 0 };
-
-    uint32_t alu_t0 = 0, alu_t1 = 0;
-    
-    uint32_t pipeline[3] = { 0x00000000 };
-
-    int cycle = 0;
-
-    // COP0
-    uint32_t cop0_cr0 = 0;
-    uint32_t cop0_cr1 = 0;
-    uint32_t cop0_xpc = 0;
-    uint32_t cop0_xcause = 0;
-    uint32_t cop0_xhaddr = 0;
-
-    // COP4 (MMU)
-    std::vector <hv2_mmio_device_t*> mmu_devices;
-
-    uint32_t cop4_ctrl = 0;
-
-    hv2_mmu_entry_t mmu_map[32] = { 0 };
-};
-
-#define HV2_CAUSE_SYSCALL         0
-#define HV2_CAUSE_DEBUG           1
-#define HV2_CAUSE_SEXCEPT         2
-#define HV2_CAUSE_MMU_NOMAP       3
-#define HV2_CAUSE_MMU_PROT_READ   4
-#define HV2_CAUSE_MMU_PROT_WRITE  5
-#define HV2_CAUSE_MMU_PROT_EXEC   6
-#define HV2_CAUSE_ILLEGAL_INSTR   7
-#define HV2_CAUSE_INVALID_COPX    8
-
-#define HV2_MMU_ATTR_READ  1
-#define HV2_MMU_ATTR_WRITE 2
-#define HV2_MMU_ATTR_EXEC  4
-
-#define HV2_BYTE  0
-#define HV2_SHORT 1
-#define HV2_LONG  2
-#define HV2_EXEC  3
-
-void hv2_exception(hv2_t* cpu, uint32_t cause) {
-    cpu->cop0_xcause = cause;
-    cpu->cop0_xpc = cpu->r[31];
-    cpu->r[31] = cpu->cop0_xhaddr;
-}
-
-hv2_mmu_entry_t* hv2_mmu_search_map(hv2_t* cpu, uint32_t vaddr) {
-    for (int i = 0; i < 32; i++) {
-        uint32_t map_vaddr = cpu->mmu_map[i].vaddr;
-        uint32_t map_size = cpu->mmu_map[i].size;
-    
-        if ((vaddr >= map_vaddr) && (vaddr < (map_vaddr + map_size)))
-            return &cpu->mmu_map[i];
-    }
-
-    return nullptr;
-}
-
-uint32_t hv2_mmu_get_physical_address(hv2_mmu_entry_t* me, uint32_t vaddr) {
-    return me->paddr + (vaddr - me->vaddr);
-}
-
-uint32_t hv2_mmu_read(hv2_t* cpu, uint32_t addr, int size) {
-    hv2_mmu_entry_t* me = hv2_mmu_search_map(cpu, addr);
-
-    if (!me) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_NOMAP);
-
-        return 0x00000000;
-    }
-
-    if ((size == HV2_EXEC) && !(me->attr & HV2_MMU_ATTR_EXEC)) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_PROT_EXEC);
-    }
-
-    if (!(me->attr & HV2_MMU_ATTR_READ)) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_PROT_READ);
-
-        return 0x00000000;
-    }
-
-    for (hv2_mmio_device_t* dev : cpu->mmu_devices) {
-        hv2_range_t range = dev->get_physical_range();
-
-        uint32_t paddr = hv2_mmu_get_physical_address(me, addr);
-
-        if (paddr >= range.start && paddr <= range.end) {
-            return dev->read(paddr - range.start, size);
-        }
-    }
-
-    // Nothing mapped at virtual address
-    hv2_exception(cpu, HV2_CAUSE_MMU_NOMAP);
-
-    return 0x00000000;
-}
-
-void hv2_mmu_write(hv2_t* cpu, uint32_t addr, uint32_t value, int size) {
-    hv2_mmu_entry_t* me = hv2_mmu_search_map(cpu, addr);
-
-    if (!me) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_NOMAP);
-
-        return;
-    }
-
-    if ((size == HV2_EXEC) && !(me->attr & HV2_MMU_ATTR_EXEC)) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_PROT_EXEC);
-
-        return;
-    }
-
-    if (!(me->attr & HV2_MMU_ATTR_WRITE)) {
-        hv2_exception(cpu, HV2_CAUSE_MMU_PROT_WRITE);
-
-        return;
-    }
-
-    for (hv2_mmio_device_t* dev : cpu->mmu_devices) {
-        hv2_range_t range = dev->get_physical_range();
-
-        uint32_t paddr = hv2_mmu_get_physical_address(me, addr);
-
-        if (paddr >= range.start && paddr <= range.end) {
-            dev->write(paddr - range.start, value, size);
-
-            return;
-        }
-    }
-
-    // Nothing mapped at virtual address
-    hv2_exception(cpu, HV2_CAUSE_MMU_NOMAP);
-}
+#include <cstdio>
+#include <cstdlib>
 
 hv2_t* hv2_create() {
     return new hv2_t;
@@ -352,10 +190,18 @@ inline uint32_t sign_extend16_if(uint32_t v, bool cond) {
     return (v & 0x8000) ? (v | 0xffff0000) : v;
 }
 
-inline uint32_t sign_extend17(uint32_t v) {
+inline int32_t sign_extend17(uint32_t v) {
     v &= 0x1ffff;
 
     return (v & 0x10000) ? (v | 0xfffe0000) : v;
+}
+
+void hv2_flush(hv2_t* cpu, uint32_t d) {
+    if ((d == 31) && (cpu->cop0_cr0 & HV2_COP0_CR0_XFLUSH_ON_FT)) {
+        cpu->pipeline[0] = 0;
+        cpu->pipeline[1] = 0;
+        cpu->pipeline[2] = 0;
+    }
 }
 
 void hv2_execute(hv2_t* cpu) {
@@ -385,6 +231,8 @@ void hv2_execute(hv2_t* cpu) {
             }
 
             hv2_alu_op_table[op](&cpu->r[d], s0, s1);
+
+            hv2_flush(cpu, d);
         } break;
 
         // Branch immediate
@@ -399,14 +247,20 @@ void hv2_execute(hv2_t* cpu) {
             uint32_t d = hv2_d_d(opcode);
             uint32_t s0 = hv2_d_s0(opcode);
 
-            if (hv2_cond_table[cond](cpu->r[d], cpu->r[s0])) {
+            if (hv2_cond_table[cond - 1](cpu->r[d], cpu->r[s0])) {
                 uint32_t imm = hv2_d_brn_imm16(opcode) | ((instr & 0x10) << 12);
 
                 // Copy PC to LR
                 if (hv2_d_brn_l(opcode))
                     cpu->r[30] = cpu->r[31];
+                
+                //printf("taken %08x (%08x)\n", cpu->r[31], sign_extend17(imm));
 
                 cpu->r[31] += sign_extend17(imm);
+
+                //printf("taken %08x after\n", cpu->r[31]);
+
+                hv2_flush(cpu, 31);
             }
         } break;
 
@@ -424,6 +278,8 @@ void hv2_execute(hv2_t* cpu) {
                 } else {
                     cpu->r[31] = cpu->r[s1];
                 }
+
+                hv2_flush(cpu, 31);
             }
         } break;
 
@@ -435,6 +291,8 @@ void hv2_execute(hv2_t* cpu) {
                 hv2_d_d(opcode),
                 hv2_d_cpe_copr(opcode)
             );
+
+            hv2_flush(cpu, hv2_d_d(opcode));
         } break;
 
         // COP instruction
@@ -451,7 +309,11 @@ void hv2_execute(hv2_t* cpu) {
             switch (hv2_d_sys_op(opcode)) {
                 // syscall
                 case 0b000: {
-                    hv2_exception(cpu, HV2_CAUSE_SYSCALL | (c << 8));
+                    if (c == 0xabcd00) {
+                        std::putchar(cpu->r[1] & 0xff);
+                    } else {
+                        hv2_exception(cpu, HV2_CAUSE_SYSCALL | (c << 8));
+                    }
                 } break;
 
                 // To-do: tpl0-3
@@ -462,6 +324,12 @@ void hv2_execute(hv2_t* cpu) {
 
                 // debug
                 case 0b101: {
+                    if (c == 0xadc0de) {
+                        std::printf("\na0=%08x\n", cpu->r[2]);
+
+                        std::exit(0);
+                    }
+
                     hv2_exception(cpu, HV2_CAUSE_DEBUG | (c << 8));
                 } break;
 
@@ -540,6 +408,8 @@ void hv2_execute(hv2_t* cpu) {
                 // Load
                 case 0: {
                     cpu->r[d] = hv2_mmu_read(cpu, addr, size);
+
+                    hv2_flush(cpu, d);
                 } break;
 
                 // Store
@@ -550,6 +420,8 @@ void hv2_execute(hv2_t* cpu) {
                 // LEA
                 case 2: {
                     cpu->r[d] = addr;
+
+                    hv2_flush(cpu, d);
                 } break;
             }
         } break;
@@ -561,6 +433,8 @@ void hv2_execute(hv2_t* cpu) {
             uint32_t shift = hv2_d_li_shift(opcode);
 
             cpu->r[d] = sign_extend16_if(imm, hv2_d_li_sx(opcode)) << shift;
+
+            hv2_flush(cpu, d);
         } break;
 
         // Set if cond immediate
@@ -572,6 +446,8 @@ void hv2_execute(hv2_t* cpu) {
             uint32_t imm = sign_extend16_if(hv2_d_sci_imm16(opcode), hv2_d_sci_sx(opcode));
 
             cpu->r[d] = hv2_cond_table[(instr >> 1) & 0x7](s0, imm) ? 1 : 0;
+
+            hv2_flush(cpu, d);
         } break;
 
         default: {
@@ -582,16 +458,24 @@ void hv2_execute(hv2_t* cpu) {
     cpu->r[0] = 0;
 }
 
+#include "disas.hpp"
+
 void hv2_cycle(hv2_t* cpu) {
     cpu->pipeline[2] = cpu->pipeline[1];
     cpu->pipeline[1] = cpu->pipeline[0];
     cpu->pipeline[0] = hv2_mmu_read(cpu, cpu->r[31], HV2_EXEC);
 
+    cpu->r[31] += 4;
+
+    // std::printf("%08x: %s sp=%08x, fp=%08x, x0=%08x, a0=%08x, at=%08x\n",
+    //     cpu->r[31],
+    //     hv2d_disassemble(cpu->pipeline[2]).c_str(),
+    //     cpu->r[29],
+    //     cpu->r[28],
+    //     cpu->r[3],
+    //     cpu->r[2],
+    //     cpu->r[1]
+    // );
+
     hv2_execute(cpu);
-}
-
-int main() {
-    hv2_t* cpu = hv2_create();
-
-    hv2_init(cpu);
 }

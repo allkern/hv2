@@ -32,7 +32,7 @@
 #define HCYAN    ESCAPE(36;1)
 #define HWHITE   ESCAPE(37;1)
 
-namespace _log {
+namespace _hv2_log {
     const char* colors_low[] = {
         ESCAPE(30), // Black
         ESCAPE(31), // Red
@@ -93,7 +93,7 @@ namespace _log {
         "error"
     };
 
-    bool disable_logs = false;
+    bool disable_hv2_logs = false;
 
     namespace settings {
         bool disable_escape = false;
@@ -117,15 +117,15 @@ namespace _log {
     }
 
     void disable() {
-        disable_logs = true;
+        disable_hv2_logs = true;
     }
 
     void enable() {
-        disable_logs = false;
+        disable_hv2_logs = false;
     }
 
     template <class... Args> void log(int type, std::string text, Args... args) {
-        if (disable_logs) return;
+        if (disable_hv2_logs) return;
         if (!is_allowed(type)) return;
 
         static char buf[0x400];
@@ -146,14 +146,14 @@ namespace _log {
     }
 
     void init(std::string app_name, std::string file_name = "", bool bright = true, bool no_escape = false) {
-        _log::settings::app_name = app_name;
+        _hv2_log::settings::app_name = app_name;
 
         if (file_name.size())
-            _log::settings::file.open(file_name);
+            _hv2_log::settings::file.open(file_name);
 
-        _log::settings::bright_colors = bright;
-        _log::settings::disable_escape = no_escape;
+        _hv2_log::settings::bright_colors = bright;
+        _hv2_log::settings::disable_escape = no_escape;
     }
 }
 
-#define _log(t, ...) _log::log(_log::t, __VA_ARGS__)
+#define _hv2_log(t, ...) _hv2_log::log(_hv2_log::t, __VA_ARGS__)
