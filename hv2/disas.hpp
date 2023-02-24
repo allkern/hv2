@@ -53,3 +53,4 @@ std::string hv2d_disassemble(hv2_disassembler_t*, uint32_t);
 void hv2d_register_symbol(hv2_disassembler_t*, std::string, uint32_t, int);
 hv2_disassembler_t* hv2d_create();
 void hv2d_init(hv2_disassembler_t*);
+void hv2d_destroy(hv2_disassembler_t*);

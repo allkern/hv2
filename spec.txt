@@ -1,4 +1,4 @@
-Hyrisc v2 ISA specification, revision 1:
+Hyrisc v2 ISA specification, revision 2:
 
 5 MSBs hold instruction/instruction group.
 
@@ -22,18 +22,18 @@ Hyrisc v2 ISA specification, revision 1:
 11100 -> ble/blle rs0, rs1, imm (MSB 1)
 11110 -> Coprocessor instruction
 11111 -> Coprocessor instruction
-10011 -> seq.u/seq.s rs0, rs1, imm
-10101 -> sne.u/sne.s rs0, rs1, imm
-10111 -> sgt.u/sgt.s rs0, rs1, imm
-11001 -> sge.u/sge.s rs0, rs1, imm
-11011 -> slt.u/slt.s rs0, rs1, imm
-11101 -> sle.u/sle.s rs0, rs1, imm
+10011 -> seqi.u/seqi.s rs0, rs1, imm
+10101 -> snei.u/snei.s rs0, rs1, imm
+10111 -> sgti.u/sgti.s rs0, rs1, imm
+11001 -> sgei.u/sgei.s rs0, rs1, imm
+11011 -> slti.u/slti.s rs0, rs1, imm
+11101 -> slei.u/slei.s rs0, rs1, imm
+01011 -> Set if Cond Register
 00001 -> Reserved (trap)
 00011 -> Reserved (trap)
 00101 -> Reserved (trap)
 00111 -> Reserved (trap)
 01001 -> Reserved (trap)
-01011 -> Reserved (trap)
 
 Encoding breakdown:
 
@@ -149,6 +149,20 @@ iiiiixxx xxyyyyyz zzzzwwww wSSOOmmm (Register)
                                       101 -> lt
                                       110 -> le
 
+01011 -> Set if Cond Register:
+01011xxx xxyyyyyz zzzz---- --cccc--
+                             |
+                             |
+                             |
+                             +------> 0000 -> Reserved
+                                      0001 -> eq
+                                      0010 -> ne
+                                      0011 -> gt
+                                      0100 -> ge
+                                      0101 -> lt
+                                      0110 -> le
+                                      1000-1111 -> Reserved
+
 Instruction aliases (alu=any ALU op):
 nop         -> add.u    r0, r0, r0
             -> alu      r0, r0, r0
@@ -182,7 +196,7 @@ pop rd      -> add.u    sp, 4
                load.l   rd, [sp-4]
 
 bxxi.S/blxxi.S rd, imm0, imm1
-            -> sxx.S at, rd, imm0
+            -> sxxi.S at, rd, imm0
                bne.S/blne.S at, r0, imm1
 
 Privilege model:
@@ -228,3 +242,4 @@ Load/Store/LEA Fixed:       iiiiixxx xxyyyyyI IIIIIIII ISSOOmmm
 Load/Store/LEA Register:    iiiiixxx xxyyyyyz zzzzwwww wSSOOmmm
 Load immediate:             10001xxx xxIIIIII IIIIIIII IISsssss
 Set Cond Immediate:         1ccc1xxx xxyyyyyI IIIIIIII IIIIIIIS
+Set Cond Register:          01011xxx xxyyyyyz zzzzz--- --OOOO--

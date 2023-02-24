@@ -38,6 +38,8 @@ build-sdl2:
 IMGUI_SRC := $(addprefix ../, $(wildcard imgui/*.cpp))
 
 deps:
+	git clone https://github.com/serge1/elfio
+	git clone https://github.com/ocornut/imgui
 	mkdir -p build-linux
 	cd build-linux
 	c++ -I../$(IMGUI_DIR) \

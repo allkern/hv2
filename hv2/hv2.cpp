@@ -56,6 +56,7 @@ inline uint32_t hv2_d_li_shift (uint32_t opc) { return (opc      ) & 0x1f; }
 inline uint32_t hv2_d_sci_cond (uint32_t opc) { return (opc >> 28) & 0x7; }
 inline uint32_t hv2_d_sci_imm16(uint32_t opc) { return (opc >>  1) & 0xffff; }
 inline uint32_t hv2_d_sci_sx   (uint32_t opc) { return (opc      ) & 0x1; }
+inline uint32_t hv2_d_scr_op   (uint32_t opc) { return (opc >>  2) & 0xf; }
 
 typedef void (*hv2_alu_op_t)(uint32_t*, uint32_t, uint32_t);
 
@@ -270,7 +271,7 @@ void hv2_execute(hv2_t* cpu) {
             uint32_t d = hv2_d_d(opcode);
             uint32_t s0 = hv2_d_s0(opcode);
 
-            if (hv2_cond_table[cond](cpu->r[d], cpu->r[s0])) {
+            if (hv2_cond_table[cond - 1](cpu->r[d], cpu->r[s0])) {
                 uint32_t s1 = hv2_d_s1(opcode);
 
                 if (hv2_d_brn_i(opcode)) {
@@ -445,7 +446,20 @@ void hv2_execute(hv2_t* cpu) {
             uint32_t s0 = hv2_d_s0(opcode);
             uint32_t imm = sign_extend16_if(hv2_d_sci_imm16(opcode), hv2_d_sci_sx(opcode));
 
-            cpu->r[d] = hv2_cond_table[(instr >> 1) & 0x7](s0, imm) ? 1 : 0;
+            uint32_t cond = (instr >> 1) & 0x7;
+
+            cpu->r[d] = hv2_cond_table[cond - 1](s0, imm) ? 1 : 0;
+
+            hv2_flush(cpu, d);
+        } break;
+
+        // Set if Cond Register
+        case 0b01011: {
+            uint32_t d = hv2_d_d(opcode);
+            uint32_t s0 = cpu->r[hv2_d_s0(opcode)];
+            uint32_t s1 = cpu->r[hv2_d_s1(opcode)];
+
+            cpu->r[d] = hv2_cond_table[hv2_d_scr_op(opcode) - 1](s0, s1) ? 1 : 0;
 
             hv2_flush(cpu, d);
         } break;
@@ -460,22 +474,78 @@ void hv2_execute(hv2_t* cpu) {
 
 #include "disas.hpp"
 
+#include "elfio/elfio.hpp"
+#include "elfio/elfio_segment.hpp"
+#include "elfio/elfio_section.hpp"
+#include "elfio/elfio_symbols.hpp"
+
+void hv2d_load_symbols(ELFIO::elfio& elf, hv2_disassembler_t* dis) {
+    // Load symbols
+    for (int i = 0; i < elf.sections.size(); i++) {
+        ELFIO::section* sect = elf.sections[i];
+
+        if (sect->get_type() == ELFIO::SHT_SYMTAB) {
+            ELFIO::symbol_section_accessor ssa(elf, sect);
+
+            for (ELFIO::Elf_Xword j = 0; j < ssa.get_symbols_num(); j++) {
+                std::string name;
+                ELFIO::Elf64_Addr value;
+                ELFIO::Elf_Xword size;
+                unsigned char bind;
+                unsigned char type;
+                uint16_t section_index;
+                unsigned char other;
+
+                ssa.get_symbol(
+                    j,
+                    name,
+                    value,
+                    size,
+                    bind,
+                    type,
+                    section_index,
+                    other
+                );
+
+                if (!name.size())
+                    continue;
+                
+                if (bind != ELFIO::STB_GLOBAL)
+                    continue;
+
+                hv2d_register_symbol(dis, name, value, 0);
+            }
+        }
+    }
+}
+
 void hv2_cycle(hv2_t* cpu) {
     cpu->pipeline[2] = cpu->pipeline[1];
     cpu->pipeline[1] = cpu->pipeline[0];
     cpu->pipeline[0] = hv2_mmu_read(cpu, cpu->r[31], HV2_EXEC);
+    
+    // ELFIO::elfio elf;
+    
+    // elf.load("test.elf");
+    
+    // hv2_disassembler_t* dis = hv2d_create();
+    
+    // hv2d_load_symbols(elf, dis);
 
-    cpu->r[31] += 4;
+    // dis->vaddr = cpu->r[31] - 8;
 
-    // std::printf("%08x: %s sp=%08x, fp=%08x, x0=%08x, a0=%08x, at=%08x\n",
-    //     cpu->r[31],
-    //     hv2d_disassemble(cpu->pipeline[2]).c_str(),
+    // std::printf("%s sp=%08x, fp=%08x, x0=%08x, a0=%08x, at=%08x\n",
+    //     hv2d_disassemble(dis, cpu->pipeline[2]).c_str(),
     //     cpu->r[29],
     //     cpu->r[28],
     //     cpu->r[3],
     //     cpu->r[2],
     //     cpu->r[1]
     // );
+    
+    // hv2d_destroy(dis);
+
+    cpu->r[31] += 4;
 
     hv2_execute(cpu);
 }

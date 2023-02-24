@@ -117,6 +117,7 @@ inline uint32_t hv2d_d_li_shift (uint32_t opc) { return (opc      ) & 0x1f; }
 inline uint32_t hv2d_d_sci_cond (uint32_t opc) { return (opc >> 28) & 0x7; }
 inline uint32_t hv2d_d_sci_imm16(uint32_t opc) { return (opc >>  1) & 0xffff; }
 inline uint32_t hv2d_d_sci_sx   (uint32_t opc) { return (opc      ) & 0x1; }
+inline uint32_t hv2d_d_scr_op   (uint32_t opc) { return (opc >>  2) & 0xf; }
 
 inline uint32_t hv2d_sign_extend16_if(uint32_t v, bool cond) {
     if (!cond) return v;
@@ -398,6 +399,17 @@ std::string hv2d_disassemble(hv2_disassembler_t* dis, uint32_t opcode) {
             dis->mnemonic = "SCI to-do";
             dis->operands = "to-do";
         } break;
+
+        // Set if cond register
+        case 0b01011: {
+            dis->mnemonic = "s" + cc_cond_map[hv2d_d_scr_op(opcode)];
+            
+            std::string d = hv2d_print_register(dis, hv2d_d_d(opcode));
+            std::string s0 = hv2d_print_register(dis, hv2d_d_s0(opcode));
+            std::string s1 = hv2d_print_register(dis, hv2d_d_s1(opcode));
+
+            dis->operands = d + ", " + s0 + ", " + s1;
+        } break;
     }
 
     skip:
@@ -460,4 +472,8 @@ hv2_disassembler_t* hv2d_create() {
 
 void hv2d_init(hv2_disassembler_t* dis) {
     std::memset(dis, 0, sizeof(hv2_disassembler_t));
+}
+
+void hv2d_destroy(hv2_disassembler_t* dis) {
+    delete dis;
 }
