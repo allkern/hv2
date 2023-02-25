@@ -61,7 +61,6 @@ void hv2f_load_elf_to_guest_memory(std::string name, hv2_t* cpu, dev_ram_t* ram,
 dev_ram_t* hv2f_attach_memory(hv2_t* cpu, uint32_t base, uint32_t size) {
     dev_ram_t* ram = new dev_ram_t;
 
-    // Allocate 64 MiB of RAM
     ram->init(base, size);
     
     hv2_mmu_attach_device(cpu, ram);
@@ -128,6 +127,27 @@ void hv2f_disassemble_load_symbols(ELFIO::elfio& elf, hv2_disassembler_t* dis) {
     }
 }
 
+#include <algorithm> 
+#include <cctype>
+#include <locale>
+
+static inline void ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
+
+static inline void rtrim(std::string &s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+static inline void trim(std::string &s) {
+    rtrim(s);
+    ltrim(s);
+}
+
 void hv2f_disassemble_elf(std::string name) {
     ELFIO::elfio elf;
 
@@ -159,7 +179,11 @@ void hv2f_disassemble_elf(std::string name) {
         uint32_t* ptr = (uint32_t*)data;
 
         for (int j = 0; j < sect->get_size(); j += 4) {
-            std::cout << hv2d_disassemble(dis, *(uint32_t*)&data[j]) << std::endl;
+            std::string disasm = hv2d_disassemble(dis, *(uint32_t*)&data[j]);
+
+            rtrim(disasm);
+
+            std::cout << disasm << std::endl;
         }
     }
 }
