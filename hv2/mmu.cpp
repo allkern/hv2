@@ -3,12 +3,14 @@
 #include "exception.hpp"
 
 hv2_mmu_entry_t* hv2_mmu_search_map(hv2_t* cpu, uint32_t vaddr) {
+    hv2_t::mmu_map_t map = cpu->mmu_maps[cpu->cop4_i_cmap];
+
     for (int i = 0; i < 32; i++) {
-        uint32_t map_vaddr = cpu->mmu_map[i].vaddr;
-        uint32_t map_size = cpu->mmu_map[i].size;
+        uint32_t map_vaddr = map[i].vaddr;
+        uint32_t map_size = map[i].size;
     
         if ((vaddr >= map_vaddr) && (vaddr < (map_vaddr + map_size)))
-            return &cpu->mmu_map[i];
+            return &map[i];
     }
 
     return nullptr;
@@ -45,7 +47,7 @@ hv2_mmio_device_t* hv2_mmu_get_device_at_phys(hv2_t* cpu, uint32_t paddr) {
 uint32_t hv2_mmu_get_phys(hv2_t* cpu, uint32_t addr, int size) {
     uint32_t phys = 0;
 
-    if (cpu->cop4_ctrl & HV2_MMU_CTRL_ENABLE) {
+    if (cpu->cop4_ctrl & MMU_CTRL_ENABLE) {
         hv2_mmu_entry_t* me = hv2_mmu_search_map(cpu, addr);
 
         if (!me) {
@@ -54,11 +56,11 @@ uint32_t hv2_mmu_get_phys(hv2_t* cpu, uint32_t addr, int size) {
             return 0x00000000;
         }
 
-        if ((size == HV2_EXEC) && !(me->attr & HV2_MMU_ATTR_EXEC)) {
+        if ((size == HV2_EXEC) && !(me->attr & MMU_ATTR_EXEC)) {
             hv2_exception(cpu, HV2_CAUSE_MMU_PROT_EXEC);
         }
 
-        if (!(me->attr & HV2_MMU_ATTR_READ)) {
+        if (!(me->attr & MMU_ATTR_READ)) {
             hv2_exception(cpu, HV2_CAUSE_MMU_PROT_READ);
 
             return 0x00000000;
@@ -75,7 +77,7 @@ uint32_t hv2_mmu_get_phys(hv2_t* cpu, uint32_t addr, int size) {
     if (size == HV2_EXEC) {
         if (phys & 0x3)
             hv2_exception(cpu, HV2_CAUSE_MMU_XALIGN);
-    } else if (cpu->cop4_ctrl & HV2_MMU_CTRL_EXC_ON_RWALIGN) {
+    } else if (cpu->cop4_ctrl & MMU_CTRL_RWALIGN_EXC) {
         // Address is not 4-byte aligned
         if ((size == HV2_LONG) && (phys & 0x3))
             hv2_exception(cpu, HV2_CAUSE_MMU_RWALIGN);
@@ -126,5 +128,5 @@ void hv2_mmu_attach_device(hv2_t* cpu, hv2_mmio_device_t* dev) {
 }
 
 void hv2_mmu_create_mapping(hv2_t* cpu, int idx, const hv2_mmu_entry_t& me) {
-    cpu->mmu_map[idx] = me;
+    cpu->mmu_maps[cpu->cop4_i_cmap][idx] = me;
 }

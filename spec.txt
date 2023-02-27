@@ -1,4 +1,4 @@
-Hyrisc v2 ISA specification, revision 2:
+Hyrisc v2 ISA specification, revision 3:
 
 5 MSBs hold instruction/instruction group.
 
@@ -106,7 +106,7 @@ Iccc0xxx xxyyyyyI IIIIIIII IIIIIIIL
      100 -> tpl3 /
      101 -> debug
      110 -> excep
-     111 -> Reserved
+     111 -> sysret
 
 10000 -> Load/Store/LEA:
 iiiiixxx xxyyyyyI IIIIIIII ISSOOmmm (Fixed)

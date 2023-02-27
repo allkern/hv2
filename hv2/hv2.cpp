@@ -1,5 +1,6 @@
 #include "hv2.hpp"
 #include "exception.hpp"
+#include "privilege.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -127,16 +128,17 @@ uint32_t* hv2_get_cop_register(hv2_t* cpu, uint32_t copn, uint32_t copr) {
 
         // COP4 (MMU)
         case 4: {
-            if (copr == 0) {
-                return &cpu->cop4_ctrl;
+            switch (copr) {
+                case 0: return &cpu->cop4_ctrl;
+                case 1: return &cpu->cop4_msel;
             }
 
             constexpr unsigned mmu_map_size = sizeof(hv2_mmu_entry_t) * 32;
 
-            if ((copr >= 1) && (copr < (1 + mmu_map_size))) {
-                uint32_t* ptr = (uint32_t*)&cpu->mmu_map;
+            if ((copr >= 0x10) && (copr < (0x10 + mmu_map_size))) {
+                uint32_t* ptr = (uint32_t*)(&cpu->mmu_maps[cpu->cop4_msel]);
 
-                return &ptr[copr - 1];
+                return &ptr[copr - 0x10];
             }
         } break;
     }
@@ -202,6 +204,26 @@ void hv2_flush(hv2_t* cpu, uint32_t d) {
         cpu->pipeline[0] = 0;
         cpu->pipeline[1] = 0;
         cpu->pipeline[2] = 0;
+    }
+}
+
+void hv2_privilege_transition(hv2_t* cpu, int new_pl) {
+    cpu->pl = new_pl;
+
+    if (cpu->pl == 0) {
+        if (cpu->cop4_ctrl & MMU_CTRL_DISABLE_ON_TPL0) {
+            cpu->cop4_ctrl &= ~MMU_CTRL_ENABLE;
+        }
+    }
+
+    if (cpu->pl == 1) {
+        if (cpu->cop4_ctrl & MMU_CTRL_ENABLE_ON_TPL1) {
+            cpu->cop4_ctrl |= MMU_CTRL_ENABLE;
+        }
+    }
+
+    if (cpu->cop4_ctrl & MMU_CTRL_REMAP_ON_PLT) {
+        cpu->cop4_i_cmap = cpu->pl;
     }
 }
 
@@ -306,21 +328,18 @@ void hv2_execute(hv2_t* cpu) {
         // System
         case 0b01111: {
             uint32_t c = hv2_d_sys_imm24(opcode);
+            uint32_t op = hv2_d_sys_op(opcode);
 
-            switch (hv2_d_sys_op(opcode)) {
+            switch (op) {
                 // syscall
                 case 0b000: {
-                    if (c == 0xabcd00) {
-                        std::putchar(cpu->r[1] & 0xff);
-                    } else {
-                        hv2_exception(cpu, HV2_CAUSE_SYSCALL | (c << 8));
-                    }
+                    hv2_exception(cpu, HV2_CAUSE_SYSCALL | (c << 8));
                 } break;
 
                 // To-do: tpl0-3
                 case 0b001: case 0b010:
                 case 0b011: case 0b100: {
-                    hv2_exception(cpu, HV2_CAUSE_ILLEGAL_INSTR);
+                    hv2_exception(cpu, HV2_CAUSE_TPL0 + (op - 1));
                 } break;
 
                 // debug
@@ -328,7 +347,7 @@ void hv2_execute(hv2_t* cpu) {
                     if (c == 0xadc0de) {
                         std::printf("\na0=%08x\n", cpu->r[2]);
 
-                        std::exit(0);
+                        std::exit(cpu->r[2]);
                     }
 
                     hv2_exception(cpu, HV2_CAUSE_DEBUG | (c << 8));
@@ -339,9 +358,11 @@ void hv2_execute(hv2_t* cpu) {
                     hv2_exception(cpu, HV2_CAUSE_SEXCEPT | (c << 8));
                 } break;
 
-                // Reserved
+                // sysret
                 default: {
-                    hv2_exception(cpu, HV2_CAUSE_ILLEGAL_INSTR);
+                    hv2_privilege_down(cpu);
+
+                    cpu->r[31] = cpu->cop0_xpc;
                 } break;
             } 
         } break;
@@ -523,29 +544,39 @@ void hv2_cycle(hv2_t* cpu) {
     cpu->pipeline[2] = cpu->pipeline[1];
     cpu->pipeline[1] = cpu->pipeline[0];
     cpu->pipeline[0] = hv2_mmu_read(cpu, cpu->r[31], HV2_EXEC);
-    
-    // ELFIO::elfio elf;
-    
-    // elf.load("test.elf");
-    
-    // hv2_disassembler_t* dis = hv2d_create();
-    
-    // hv2d_load_symbols(elf, dis);
 
-    // dis->vaddr = cpu->r[31] - 8;
+    if (cpu->internal_trace) {
+        ELFIO::elfio elf;
 
-    // std::printf("%s sp=%08x, fp=%08x, x0=%08x, a0=%08x, at=%08x\n",
-    //     hv2d_disassemble(dis, cpu->pipeline[2]).c_str(),
-    //     cpu->r[29],
-    //     cpu->r[28],
-    //     cpu->r[3],
-    //     cpu->r[2],
-    //     cpu->r[1]
-    // );
-    
-    // hv2d_destroy(dis);
+        cpu->internal_trace_elf = elf.load("test.elf");
+
+        hv2_disassembler_t* dis = hv2d_create();
+        
+        // if (cpu->internal_trace_elf)
+        //     hv2d_load_symbols(elf, dis);
+
+        dis->vaddr = cpu->r[31] - 8;
+
+        std::printf("%s sp=%08x, fp=%08x, x0=%08x, a0=%08x, at=%08x\n",
+            hv2d_disassemble(dis, cpu->pipeline[2]).c_str(),
+            cpu->r[29],
+            cpu->r[28],
+            cpu->r[3],
+            cpu->r[2],
+            cpu->r[1]
+        );
+        
+        hv2d_destroy(dis);
+    }
 
     cpu->r[31] += 4;
 
     hv2_execute(cpu);
+}
+
+void hv2_reset(hv2_t* cpu) {
+    std::memset(cpu, 0, sizeof(hv2_t));
+
+    //cpu->cop0_xcause = 0xff130301;
+    cpu->cop0_xcause = 0xaa485632;
 }

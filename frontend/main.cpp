@@ -3,13 +3,13 @@
 #include "hv2/log.hpp"
 
 // Devices
+#include "dev/bios_rom.hpp"
+#include "dev/bios_ram.hpp"
 #include "dev/ram.hpp"
 #include "dev/vga_textmode.hpp"
 
 // 64 MiB @ 80000000
-#define CPU_SPEED 1000000 // 1 MHz
-#define RAM_SIZE 0x4000000
-#define RAM_BASE 
+#define CPU_SPEED 1000000 // 4 MHz
 
 #include "elfio/elfio.hpp"
 #include "elfio/elfio_segment.hpp"
@@ -291,39 +291,61 @@ int main(int argc, const char* argv[]) {
     hv2_t* cpu = hv2_create();
 
     hv2_init(cpu);
+    hv2_reset(cpu);
 
     // Make CPU flush pipeline after flow transfers
     cpu->cop0_cr0 |= HV2_COP0_CR0_XFLUSH_ON_FT;
-
+    cpu->internal_trace = cli.get_switch(cli::SW_TRACE);
     // Enable MMU
-    cpu->cop4_ctrl = 1;
+    // cpu->cop4_ctrl = 1;
+
+    // Create devices
 
     dev_ram_t* ram = hv2f_attach_memory(cpu, memory_base, memory_size);
-
+    dev_bios_rom_t bios_rom;
+    dev_bios_ram_t bios_ram;
     dev_vga_textmode_t vga;
 
+    std::string bios;
+
+    if (cli.is_set(cli::ST_BIOS)) {
+        bios = cli.get_setting(cli::ST_BIOS);
+    } else {
+        bios = "bios.bin";
+    }
+
+    bios_rom.init(bios, 0x00000000);
+    bios_ram.init(0x80000, 0x10000);
     vga.init("IBM_VGA_8x16.bin", 8, 16);
     
+    hv2_mmu_attach_device(cpu, &bios_rom);
+    hv2_mmu_attach_device(cpu, &bios_ram);
     hv2_mmu_attach_device(cpu, &vga);
 
     screen_t* screen = screen_create();
 
     screen_init(screen, "VGA screen", vga.get_screen_width(), vga.get_screen_height());
+
+    unsigned long cpu_speed = 1000000;
+
+    if (cli.is_set(cli::ST_CPU_SPEED)) {
+        cpu_speed = hv2f_hrsize_to_bytes(cli.get_setting(cli::ST_CPU_SPEED));
+    }
     
-    hv2f_load_elf_to_guest_memory(cli.get_setting(cli::ST_INPUT), cpu, ram, memory_base);
+    // hv2f_load_elf_to_guest_memory(cli.get_setting(cli::ST_INPUT), cpu, ram, memory_base);
 
     // Map VGA range to virtual memory
-    hv2_mmu_entry_t me;
+    // hv2_mmu_entry_t me;
 
-    me.vaddr = 0xb8000;
-    me.paddr = 0xb8000;
-    me.size  = 0x8000;
-    me.attr  = ELFIO::PF_R | ELFIO::PF_W;
+    // me.vaddr = 0xb8000;
+    // me.paddr = 0xb8000;
+    // me.size  = 0x8000;
+    // me.attr  = ELFIO::PF_R | ELFIO::PF_W;
 
-    hv2_mmu_create_mapping(cpu, 20, me);
+    // hv2_mmu_create_mapping(cpu, 20, me);
 
     while (screen->open) {
-        int counter = CPU_SPEED / 60;
+        int counter = cpu_speed / 60;
 
         while (counter--) {
             hv2_cycle(cpu);

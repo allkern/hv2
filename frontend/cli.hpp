@@ -9,7 +9,8 @@ namespace cli {
         SW_VERSION,
         SW_DISASSEMBLE,
         SW_HELP,
-        SW_STDIN
+        SW_STDIN,
+        SW_TRACE
     };
 
     enum setting_t {
@@ -19,6 +20,8 @@ namespace cli {
         ST_LINE_SIZE,
         ST_MEMORY_SIZE,
         ST_MEMORY_BASE,
+        ST_BIOS,
+        ST_CPU_SPEED
     };
 
     class parser_t {
@@ -39,6 +42,7 @@ namespace cli {
             WSHORTHAND("-v", "--version"             , SW_VERSION            ),
             WSHORTHAND("-H", "--help"                , SW_HELP               ),
             WSHORTHAND("-d", "--disassemble"         , SW_DISASSEMBLE        ),
+            WSHORTHAND("-t", "--trace"               , SW_TRACE              ),
             LONG_ONLY (      "--stdin"               , SW_STDIN              )
         };
 
@@ -48,6 +52,8 @@ namespace cli {
             WSHORTHAND("-So", "--opcode-size"         , ST_OPCODE_SIZE        ),
             WSHORTHAND("-Sl", "--line-size"           , ST_LINE_SIZE          ),
             WSHORTHAND("-M" , "--memory"              , ST_MEMORY_SIZE        ),
+            WSHORTHAND("-b" , "--bios"                , ST_BIOS               ),
+            WSHORTHAND("-s" , "--cpu-speed"           , ST_CPU_SPEED          ),
             LONG_ONLY (       "--memory-base"         , ST_MEMORY_BASE        )
         };
 
