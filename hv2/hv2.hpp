@@ -5,13 +5,15 @@
 #include <array>
 
 #include "mmu.hpp"
+#include "clock.hpp"
 
 #define HV2_PIPELINE_SIZE 3
 
 // Magic reset number
-#define HV2_CAUSE_RESET           0xff130301
+// #define HV2_CAUSE_RESET           0xff130301
 
-#define HV2_CAUSE_CPU             0x400000
+#define HV2_CAUSE_MASK            0xffc00000
+#define HV2_CAUSE_CPU             0x00400000
 #define HV2_CAUSE_SYSCALL         (HV2_CAUSE_CPU | 0)
 #define HV2_CAUSE_DEBUG           (HV2_CAUSE_CPU | 1)
 #define HV2_CAUSE_SEXCEPT         (HV2_CAUSE_CPU | 2)
@@ -22,6 +24,8 @@
 #define HV2_CAUSE_ILLEGAL_INSTR   (HV2_CAUSE_CPU | 7)
 #define HV2_CAUSE_INVALID_COPX    (HV2_CAUSE_CPU | 8)
 #define HV2_CAUSE_INVALID_TPL     (HV2_CAUSE_CPU | 9)
+#define HV2_CAUSE_EXT             0xff000000
+#define HV2_CAUSE_RESET           (HV2_CAUSE_EXT | 0x485632)
 
 #define HV2_COP0_CR0_XSTACKED_ISR    0x00000001
 #define HV2_COP0_CR0_XFLUSH_ON_IRQ   0x00000002
@@ -63,11 +67,13 @@ struct hv2_t {
     int internal_map_idx = 0;
     bool internal_trace = false;
     bool internal_trace_elf = false;
+
+    float clk_freq;
 };
 
 hv2_t* hv2_create();
 void hv2_privilege_transition(hv2_t*, int);
-void hv2_init(hv2_t*);
+void hv2_init(hv2_t*, float);
 uint32_t* hv2_get_cop_register(hv2_t*, uint32_t, uint32_t);
 void hv2_flush(hv2_t*, uint32_t);
 void hv2_execute(hv2_t*);

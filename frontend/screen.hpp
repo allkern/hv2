@@ -28,15 +28,15 @@ void screen_destroy(screen_t* screen) {
     delete screen;
 }
 
-void screen_init(screen_t* screen, std::string title, int width, int height) {
+void screen_init(screen_t* screen, std::string title, int width, int height, int scale = 1, bool fullscreen = false) {
     screen->width = width;
     screen->height = height;
 
     screen->window = SDL_CreateWindow(
         title.c_str(),
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        width, height,
-        SDL_WINDOW_OPENGL
+        width * scale, height * scale,
+        SDL_WINDOW_OPENGL | (fullscreen ? SDL_WINDOW_FULLSCREEN : 0)
     );
 
     screen->renderer = SDL_CreateRenderer(

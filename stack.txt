@@ -1,0 +1,58 @@
+CPU reset, MMU disabled, PC=00000000, PL0
+
+Reset physical memory map:
+00000000-0003ffff BIOS ROM
+00040000-0004ffff I/O
+00080000-0008ffff BIOS RAM
+000b8000-000bffff VGA RAM
+80000000-83ffffff Physical Memory (64 MiB)
+
+BIOS boot process:
+1. BIOS discovers memory size
+2. BIOS sets up kernel MMU map
+3. BIOS loads kernel bootloader to low pmem
+4. BIOS sets up MMU registers (Enable on PL1 transition)
+5. BIOS transitions to PL1 (vector at V00000000)
+
+Kernel memory map:
+Kernel Low RAM     = P 80000000-803fffff -> V 00000000-003fffff (4 MiB)
+Kernel High RAM    = P 80400000-83ffffff -> V c0000000-c003ffff (60 MiB)
+I/O                = P 00080000-0008ffff -> V 80090000-8009ffff
+VGA RAM            = P 000b8000-000bffff -> V 800b8000-800bffff
+
+Kernel can syscall to access BIOS functions, kernel map is saved on syscall and restored on sysret
+
+Kernel boot process:
+1. Kernel loads own remaining sectors to low memory
+2. Kernel loads OS ELF to high memory
+3. Kernel sets up OS map given ELF program headers
+4. Kernel sets up MMU registers
+5. Kernel transitions to PL2 (control to OS)
+
+OS can syscall to access kernel functions, OS map is saved and restored on sysret
+
+OS memory map depends on ELF
+
+COP4_CTRL register:
+
+-------- -------- -------- --------
+
+MMU COP4 register file:
+
+0000: mmuctrl
+0001: mmupmap
+0010: mmumap0_paddr
+0011: mmumap0_vaddr
+0012: mmumap0_msize
+0013: mmumap0_mattr
+0014: mmumap1_paddr
+0015: mmumap1_vaddr
+0016: mmumap1_msize
+0017: mmumap1_mattr
+...
+
+
+
+
+
+

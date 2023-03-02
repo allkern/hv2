@@ -6,6 +6,10 @@
 #include <string>
 
 #include "hv2/mmu_device.hpp"
+#include "hv2/clock.hpp"
+
+#include "pci_device.hpp"
+#include "io_device.hpp"
 
 #define WIDTH 80
 #define HEIGHT 25
@@ -29,7 +33,33 @@ class dev_vga_textmode_t : public hv2_mmio_device_t {
     uint32_t base = 0xb8000;
     uint32_t size = 0x8000;
 
+    hv2_clock_t* clk;
+
 public:
+    pci_desc_t get_pci_desc() {
+        return {
+            0x00000000, // i8042 PS/2 Keyboard Controller
+            0x00008086, // Intel Corporation
+            0x00000000, // Status
+            0x00000000, // Command
+            0x00000003, // Display Controller
+            0x00000000, // VGA-compatible Controller
+            0x00000000, // VGA Controller
+            0x00000000, // Revision
+            0x00000000, // BIST-capable
+            0x00000000, // Header type 0x0
+            0x00000000, // LAT
+            0x00000000, // CLSIZE
+            // BARs:
+            PCI_MEM_BAR(base),
+            0x00000000,
+            0x00000000,
+            0x00000000,
+            0x00000000,
+            0x00000000
+        };
+    }
+
     void load_rom(std::string name, int char_width, int char_height) {
         std::ifstream file(name, std::ios::binary | std::ios::ate);
 
@@ -88,28 +118,56 @@ public:
     }
 
     void render() {
-        for (int y = 0; y < HEIGHT * char_height; y++) {
-            for (int x = 0; x < WIDTH * char_width; x++) {
-                int cx = x / char_width;
-                int cy = y / char_height;
+        uint32_t buf_width = WIDTH * char_width;
 
-                uint32_t off = (cx * sizeof(uint16_t)) + (cy * sizeof(uint16_t) * WIDTH);
+        for (int cy = 0; cy < HEIGHT; cy++) {
+            for (int cx = 0; cx < WIDTH; cx++) {
+                int bx = cx * char_width;
+                int by = cy * char_height;
 
-                uint16_t data = *(uint16_t*)&buf[off];
+                uint32_t vram_offset = (cx * 2) + ((cy * 2) * WIDTH);
+                uint16_t data = *(uint16_t*)&buf[vram_offset];
 
-                uint32_t rom_off = ((data & 0xff) * char_height) + (y % char_height);
+                uint8_t ch = data & 0xff;
 
-                int b = x % char_width;
+                int fgc = (data >> 8) & 0xf;
+                int bgc = (data >> 12) & 0x7;
 
-                int fgi = (data >> 8) & 0xf;
-                int bgi = (data >> 12) & 0x7;
+                uint32_t rom_offset = (ch * char_height);
 
-                uint32_t screen_buf_off = x + (y * WIDTH * char_width);
-                bool fg = (rom[rom_off] << b) & 0x80;
+                for (int y = 0; y < char_height; y++) {
+                    uint8_t byte = rom[rom_offset + y];
 
-                screen_buf[screen_buf_off] = fg ? vga_palette_rgba[fgi] : vga_palette_rgba[bgi];
+                    for (int x = 0; x < char_width; x++) {
+                        bool fg = (byte << x) & 0x80;
+
+                        screen_buf[(bx + x) + ((y + by) * buf_width)] = fg ? vga_palette_rgba[fgc] : vga_palette_rgba[bgc];
+                    }
+                }
             }
         }
+        // for (int y = 0; y < HEIGHT * char_height; y++) {
+        //     for (int x = 0; x < WIDTH * char_width; x++) {
+        //         int cx = x / char_width;
+        //         int cy = y / char_height;
+
+        //         uint32_t off = (cx * sizeof(uint16_t)) + (cy * sizeof(uint16_t) * WIDTH);
+
+        //         uint16_t data = *(uint16_t*)&buf[off];
+
+        //         uint32_t rom_off = ((data & 0xff) * char_height) + (y % char_height);
+
+        //         int b = x % char_width;
+
+        //         int fgi = (data >> 8) & 0xf;
+        //         int bgi = (data >> 12) & 0x7;
+
+        //         uint32_t screen_buf_off = x + (y * WIDTH * char_width);
+        //         bool fg = (rom[rom_off] << b) & 0x80;
+
+        //         screen_buf[screen_buf_off] = fg ? vga_palette_rgba[fgi] : vga_palette_rgba[bgi];
+        //     }
+        // }
     }
 
     void init_screen_buf() {

@@ -1,3 +1,4 @@
+#include "hv2/clock.hpp"
 #include "hv2/hv2.hpp"
 #include "hv2/mmu.hpp"
 #include "hv2/log.hpp"
@@ -7,9 +8,9 @@
 #include "dev/bios_ram.hpp"
 #include "dev/ram.hpp"
 #include "dev/vga_textmode.hpp"
-
-// 64 MiB @ 80000000
-#define CPU_SPEED 1000000 // 4 MHz
+#include "dev/io.hpp"
+#include "dev/pci.hpp"
+#include "dev/i8042.hpp"
 
 #include "elfio/elfio.hpp"
 #include "elfio/elfio_segment.hpp"
@@ -85,6 +86,22 @@ uint32_t hv2f_hrsize_to_bytes(std::string size) {
     }
 
     return bytes;
+}
+
+uint32_t hv2f_hrsize_to_bytesf(std::string size) {
+    float value;
+
+    char unit = size.back();
+
+    value = std::stof(size.substr(0, size.size() - 1));
+
+    switch (unit) {
+        case 'G': { value *= 1000000000; } break;
+        case 'M': { value *= 1000000; } break;
+        case 'K': { value *= 1000; } break;
+    }
+
+    return value;
 }
 
 void hv2f_disassemble_load_symbols(ELFIO::elfio& elf, hv2_disassembler_t* dis) {
@@ -290,70 +307,102 @@ int main(int argc, const char* argv[]) {
 
     hv2_t* cpu = hv2_create();
 
-    hv2_init(cpu);
+    float cpu_freq = 1000000;
+
+    if (cli.is_set(cli::ST_CPU_SPEED)) {
+        cpu_freq = hv2f_hrsize_to_bytesf(cli.get_setting(cli::ST_CPU_SPEED));
+    }
+
+    hv2_init(cpu, cpu_freq);
     hv2_reset(cpu);
 
     // Make CPU flush pipeline after flow transfers
     cpu->cop0_cr0 |= HV2_COP0_CR0_XFLUSH_ON_FT;
     cpu->internal_trace = cli.get_switch(cli::SW_TRACE);
-    // Enable MMU
-    // cpu->cop4_ctrl = 1;
 
     // Create devices
-
     dev_ram_t* ram = hv2f_attach_memory(cpu, memory_base, memory_size);
     dev_bios_rom_t bios_rom;
     dev_bios_ram_t bios_ram;
     dev_vga_textmode_t vga;
+    dev_io_t io;
 
-    std::string bios;
+    std::string bios = "bios.bin";
 
     if (cli.is_set(cli::ST_BIOS)) {
         bios = cli.get_setting(cli::ST_BIOS);
-    } else {
-        bios = "bios.bin";
     }
 
     bios_rom.init(bios, 0x00000000);
     bios_ram.init(0x80000, 0x10000);
-    vga.init("IBM_VGA_8x16.bin", 8, 16);
-    
+
+    std::string vga_font = "IBM_VGA_8x16.bin";
+
+    if (cli.is_set(cli::ST_VGA_FONT_ROM)) {
+        vga_font = cli.get_setting(cli::ST_VGA_FONT_ROM);
+    }
+
+    int vga_font_width = 8;
+    int vga_font_height = 16;
+
+    if (cli.is_set(cli::ST_VGA_FONT_SIZE)) {
+        std::string size = cli.get_setting(cli::ST_VGA_FONT_SIZE);
+
+        auto xpos = size.find('x');
+
+        vga_font_width = std::stoi(size.substr(0, xpos));
+        vga_font_height = std::stoi(size.substr(xpos + 1));
+    }
+
+    vga.init(vga_font, vga_font_width, vga_font_height);
+
+    // Initialize MMIO controller
+    io.init(0x40000);
+
+    io_device_pci_t pci;
+    io_device_i8042_t i8042;
+
+    pci_device_t i8042_pci;
+    pci_device_t vga_pci;
+
+    i8042_pci.desc = i8042.get_pci_desc();
+    vga_pci.desc = vga.get_pci_desc();
+
+    pci.register_device(&i8042_pci, 0, 0);
+    pci.register_device(&vga_pci, 0, 1);
+
+    io.register_device(&pci);
+    io.register_device(&i8042);
+
     hv2_mmu_attach_device(cpu, &bios_rom);
     hv2_mmu_attach_device(cpu, &bios_ram);
     hv2_mmu_attach_device(cpu, &vga);
+    hv2_mmu_attach_device(cpu, &io);
 
     screen_t* screen = screen_create();
 
-    screen_init(screen, "VGA screen", vga.get_screen_width(), vga.get_screen_height());
+    int scale = 1;
 
-    unsigned long cpu_speed = 1000000;
-
-    if (cli.is_set(cli::ST_CPU_SPEED)) {
-        cpu_speed = hv2f_hrsize_to_bytes(cli.get_setting(cli::ST_CPU_SPEED));
+    if (cli.is_set(cli::ST_WINDOW_SCALE)) {
+        scale = std::stoi(cli.get_setting(cli::ST_WINDOW_SCALE));
     }
-    
-    // hv2f_load_elf_to_guest_memory(cli.get_setting(cli::ST_INPUT), cpu, ram, memory_base);
 
-    // Map VGA range to virtual memory
-    // hv2_mmu_entry_t me;
+    bool fullscreen = cli.get_switch(cli::SW_WINDOW_FULLSCREEN);
 
-    // me.vaddr = 0xb8000;
-    // me.paddr = 0xb8000;
-    // me.size  = 0x8000;
-    // me.attr  = ELFIO::PF_R | ELFIO::PF_W;
+    screen_init(screen, "VGA screen", vga.get_screen_width(), vga.get_screen_height(), scale, fullscreen);
 
-    // hv2_mmu_create_mapping(cpu, 20, me);
+    hv2_clock_t* screen_clk = hv2_clock_create();
+
+    hv2_clock_init(screen_clk, 60.0, cpu_freq);
 
     while (screen->open) {
-        int counter = cpu_speed / 60;
+        hv2_cycle(cpu);
 
-        while (counter--) {
-            hv2_cycle(cpu);
+        if (hv2_clock_tick(screen_clk)) {
+            vga.render();
+
+            screen_update(screen, vga.get_screen_buf());
         }
-
-        vga.render();
-
-        screen_update(screen, vga.get_screen_buf());
     }
 
     screen_destroy(screen);

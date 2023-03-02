@@ -9,8 +9,8 @@ hv2_t* hv2_create() {
     return new hv2_t;
 }
 
-void hv2_init(hv2_t* cpu) {
-    //std::memset(cpu, 0, sizeof(hv2_t));
+void hv2_init(hv2_t* cpu, float freq) {
+    cpu->clk_freq = freq;
 }
 
 /*                              31    24 23    16 15     8 7      0
@@ -577,6 +577,5 @@ void hv2_cycle(hv2_t* cpu) {
 void hv2_reset(hv2_t* cpu) {
     std::memset(cpu, 0, sizeof(hv2_t));
 
-    //cpu->cop0_xcause = 0xff130301;
-    cpu->cop0_xcause = 0xaa485632;
+    cpu->cop0_xcause = HV2_CAUSE_RESET;
 }

@@ -1,17 +1,20 @@
+#include "bios/defs.inc"
+
 #define VGA_RAM_BASE                0xb8000
 #define VGA_RAM_END                 0xb9000
 #define VGA_BUFFER_WIDTH            80
 #define VGA_BUFFER_HEIGHT           25
 #define VGA_BUFFER_LAST_LINE        24
 #define VGA_LINE_WIDTH              160
+#define VGA_BUFFER_SIZE             4000
 
 # VGA VT variables
 #define VGA_VT_X                    0x4
 #define VGA_VT_Y                    0x8
-
-#define a1 x20
-#define a2 x21
-#define a3 x22
+#define VGA_VT_C                    0xc
+#define VGA_VT_LC                   0x10
+#define VGA_VT_SX                   0x14
+#define VGA_VT_SY                   0x18
 
 # a0 = dst
 # a1 = src
@@ -41,6 +44,33 @@ vga_memset:
     b       L0
 
 .E0:
+    ret     r0
+
+vga_vt_save_cur:
+    li.w    x10, VGA_RAM_END
+    load.l  x11, [x10-VGA_VT_X]
+    store.l [x10-VGA_VT_SX], x11
+    load.l  x11, [x10-VGA_VT_Y]
+    store.l [x10-VGA_VT_SY], x11
+    ret     r0
+
+vga_vt_restore_cur:
+    li.w    x10, VGA_RAM_END
+    load.l  x11, [x10-VGA_VT_SX]
+    store.l [x10-VGA_VT_X], x11
+    load.l  x11, [x10-VGA_VT_SY]
+    store.l [x10-VGA_VT_Y], x11
+    ret     r0
+
+vga_vt_clear:
+    li.w    x10, VGA_RAM_END
+    li.w    a0, VGA_RAM_BASE
+    load.l  a1, [x10-VGA_VT_C]
+    lsl.u   a1, 0x8
+    li.w    a2, VGA_BUFFER_SIZE
+    call    !vga_memset
+    store.l [x10-VGA_VT_X], r0
+    store.l [x10-VGA_VT_Y], r0
     ret     r0
 
 vga_vt_scroll:
@@ -79,6 +109,7 @@ vga_vt_newline:
     ret     r0
 
 .scroll:
+    store.s [x10-VGA_VT_X], r0
     call    !vga_vt_scroll
     ret     r0
 
@@ -90,7 +121,10 @@ vga_vt_putchar:
     bleq    x11, x13, overflow
     li.u    x10, 0x0a
     beq     a0, x10, newline
-    or.u    a0, 0x0700
+    li.w    x10, VGA_RAM_END
+    load.l  x10, [x10-VGA_VT_C]
+    lsl.u   x10, 8
+    or.u    a0, a0, x10
     li.w    x10, VGA_RAM_BASE
     mul.u   x12, VGA_LINE_WIDTH
     add     x10, x10, x12
@@ -103,10 +137,24 @@ vga_vt_putchar:
 
 .overflow:
     call    !vga_vt_newline
-    move    pc, lr
+    call    !vga_vt_putchar
+    ret     r0
 
 .newline:
     call    !vga_vt_newline
+    ret     x0
+
+vga_set_color:
+    li.w    x10, VGA_RAM_END
+    load.l  x11, [x10-VGA_VT_C]
+    store.l [x10-VGA_VT_LC], x11
+    store.l [x10-VGA_VT_C], a0
+    ret     x0
+
+vga_restore_color:
+    li.w    x10, VGA_RAM_END
+    load.l  x11, [x10-VGA_VT_LC]
+    store.l [x10-VGA_VT_C], x11
     ret     x0
 
 vga_print:
@@ -122,20 +170,8 @@ vga_print:
 .E0:
     ret     r0
 
-# get_hex_length:
-#     li      x10, 2
-
-# .L0:
-#     beq     a0, r0, E0 
-#     lsr     a0, 8
-#     add.u   x10, 2
-#     b       L0
-
-# .E0:
-#     move    a0, x10
-#     ret     r0
-
-get_hex_length:
+get_integer_len:
+    xor     x10, x10, x10
 .L0:
     beq     a0, r0, E0 
     lsr.u   a0, 4
@@ -153,7 +189,7 @@ get_hex_length:
 
 vga_print_integer:
     move    x17, a0
-    call    !get_hex_length
+    call    !get_integer_len
     move    x18, a0
     move    x16, x18
     move    x19, x18

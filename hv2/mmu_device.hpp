@@ -16,4 +16,5 @@ public:
     virtual hv2_range_t get_physical_range() = 0;
     virtual uint32_t read(uint32_t, int) = 0;
     virtual void write(uint32_t, uint32_t, int) = 0;
+    virtual void master_clock() {};
 };

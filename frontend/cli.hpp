@@ -10,7 +10,8 @@ namespace cli {
         SW_DISASSEMBLE,
         SW_HELP,
         SW_STDIN,
-        SW_TRACE
+        SW_TRACE,
+        SW_WINDOW_FULLSCREEN
     };
 
     enum setting_t {
@@ -21,7 +22,10 @@ namespace cli {
         ST_MEMORY_SIZE,
         ST_MEMORY_BASE,
         ST_BIOS,
-        ST_CPU_SPEED
+        ST_CPU_SPEED,
+        ST_VGA_FONT_ROM,
+        ST_VGA_FONT_SIZE,
+        ST_WINDOW_SCALE
     };
 
     class parser_t {
@@ -39,11 +43,12 @@ namespace cli {
 #define LONG_ONLY(longname, st) { longname, st }
 
         std::unordered_map <std::string, switch_t> m_switches_map = {
-            WSHORTHAND("-v", "--version"             , SW_VERSION            ),
-            WSHORTHAND("-H", "--help"                , SW_HELP               ),
-            WSHORTHAND("-d", "--disassemble"         , SW_DISASSEMBLE        ),
-            WSHORTHAND("-t", "--trace"               , SW_TRACE              ),
-            LONG_ONLY (      "--stdin"               , SW_STDIN              )
+            WSHORTHAND("-v ", "--version"             , SW_VERSION            ),
+            WSHORTHAND("-H ", "--help"                , SW_HELP               ),
+            WSHORTHAND("-d ", "--disassemble"         , SW_DISASSEMBLE        ),
+            WSHORTHAND("-t ", "--trace"               , SW_TRACE              ),
+            WSHORTHAND("-Wf", "--fullscreen"          , SW_WINDOW_FULLSCREEN  ),
+            LONG_ONLY (       "--stdin"               , SW_STDIN              )
         };
 
         std::unordered_map <std::string, setting_t> m_settings_map = {
@@ -54,6 +59,9 @@ namespace cli {
             WSHORTHAND("-M" , "--memory"              , ST_MEMORY_SIZE        ),
             WSHORTHAND("-b" , "--bios"                , ST_BIOS               ),
             WSHORTHAND("-s" , "--cpu-speed"           , ST_CPU_SPEED          ),
+            WSHORTHAND("-Vf", "--vga-font-rom"        , ST_VGA_FONT_ROM       ),
+            WSHORTHAND("-Vs", "--vga-font-size"       , ST_VGA_FONT_SIZE      ),
+            WSHORTHAND("-Ws", "--window-scale"        , ST_WINDOW_SCALE       ),
             LONG_ONLY (       "--memory-base"         , ST_MEMORY_BASE        )
         };
 
