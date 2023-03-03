@@ -32,6 +32,17 @@ BIOS_DONE_MSG:
 BIOS_PCI_AT_BUS_MSG:
     .asciiz " bus 0, device "
 
+BIOS_PCI_MSD_TABLE:
+    .asciiz "SCSI bus controller            "
+    .asciiz "IDE controller                 "
+    .asciiz "Floppy disk controller         "
+    .asciiz "IPI bus controller             "
+    .asciiz "RAID controller                "
+    .asciiz "ATA controller                 "
+    .asciiz "SATA controller                "
+    .asciiz "SAS controller                 "
+    .asciiz "NVMe controller                "
+
 BIOS_PCI_DEVCLASS_TABLE:
     .asciiz "Unclassified                   "
     .asciiz "Mass storage device            "
@@ -51,8 +62,17 @@ BIOS_PCI_DEVCLASS_TABLE:
     .asciiz "Satellite comm. controller     "
 
 BIOS_PCI_INPUT_DEVICE_TABLE:
-    .asciiz "Keyboard controller             "
-    .asciiz "Digitizer pen                   "
-    .asciiz "Mouse Controller                "
-    .asciiz "Scanner Controller              "
-    .asciiz "Gameport Controller             "
+    .asciiz "Keyboard controller            "
+    .asciiz "Digitizer pen                  "
+    .asciiz "Mouse Controller               "
+    .asciiz "Scanner Controller             "
+    .asciiz "Gameport Controller            "
+
+BIOS_KEYB_INIT_MSG:
+    .asciiz "\nInitializing keyboard controller... "
+
+BIOS_KEYB_SINGLE_CHANNEL:
+    .asciiz "Single channel"
+
+BIOS_KEYB_DOUBLE_CHANNEL:
+    .asciiz "Double channel"

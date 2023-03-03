@@ -306,6 +306,9 @@ public:
     }
 
     void keydown(uint32_t kcode) {
+        if (CFG_BIT_CLR(PS2_CFG_FPCLK))
+            return;
+
         if (CFG_BIT_SET(PS2_CFG_FPIRQ))
             hv2_exception(cpu, HV2_CAUSE_KBC);
         
@@ -315,6 +318,8 @@ public:
     }
 
     void init(hv2_t* cpu) {
+        SET_CFG_BIT(PS2_CFG_FPCLK)
+        SET_CFG_BIT(PS2_CFG_FPIRQ)
         SET_CFG_BIT(PS2_CFG_SPCLK)
         CLR_CFG_BIT(PS2_CFG_SPIRQ)
 

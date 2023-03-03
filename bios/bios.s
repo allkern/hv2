@@ -1,7 +1,8 @@
 #include "bios/defs.inc"
 #include "bios/entry.s"
-#include "bios/util.s"
 #include "bios/io.s"
+#include "bios/util.s"
+#include "bios/keyb.s"
 #include "bios/handler.s"
 #include "bios/pci.s"
 #include "bios/vga.s"
@@ -89,20 +90,28 @@ bios_enumerate_pci_devices:
     beq     a0, x2, nodevice
 
 .device:
-    move    x3, a0
     li.w    a0, !BIOS_TAB
     call    !vga_print
     move    a0, r0
     move    a1, x1
     li      a2, 0x8
     call    !pci_read_cfg_register
+    move    at, a0
     lsr.u   a0, 24
+    li      x3, 0x0001
+    beq     a0, x3, msd
     li.w    x3, !BIOS_PCI_DEVCLASS_TABLE
+    b       continue
+
+.msd:
+    lsr.u   at, 16
+    li.w    x3, !BIOS_PCI_MSD_TABLE
+
+.continue:
     lea.l   a0, [x3+a0:5]
     call    !vga_print
     li      a0, 0x3a
     call    !vga_vt_putchar
-
     li.w    a0, !BIOS_PCI_AT_BUS_MSG
     call    !vga_print
     move    a0, x1
@@ -115,6 +124,7 @@ bios_enumerate_pci_devices:
     b       L0
 
 .E0:
+    call    !bios_8042_init
     call    !bios_lock
 
 #include "bios/data.inc"

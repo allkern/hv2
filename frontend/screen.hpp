@@ -4,10 +4,15 @@
 
 #include <string>
 
+typedef void (*kevent_t)(uint32_t);
+
 struct screen_t {
     SDL_Window* window;
     SDL_Renderer* renderer;
     SDL_Texture* texture;
+
+    kevent_t keydown_cb = nullptr;
+    kevent_t keyup_cb = nullptr;
 
     bool open;
 
@@ -55,6 +60,10 @@ void screen_init(screen_t* screen, std::string title, int width, int height, int
     screen->open = true;
 }
 
+void screen_set_keydown_cb(screen_t* screen, kevent_t cb) {
+    screen->keydown_cb = cb;
+}
+
 void screen_update(screen_t* screen, uint32_t* buf) {
     SDL_UpdateTexture(screen->texture, NULL, buf, screen->width * sizeof(uint32_t));
     SDL_RenderCopy(screen->renderer, screen->texture, NULL, NULL);
@@ -66,6 +75,10 @@ void screen_update(screen_t* screen, uint32_t* buf) {
         switch (event.type) {
             case SDL_QUIT: {
                 screen->open = false;
+            } break;
+
+            case SDL_KEYDOWN: {
+                screen->keydown_cb(event.key.keysym.scancode);
             } break;
         }
     }

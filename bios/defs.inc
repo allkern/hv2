@@ -20,12 +20,15 @@
 
 # Addresses
 #define BIOS_RAM_BASE               0x80000
+#define BIOS_KBUF_BASE              0x81000
+#define BIOS_KBUF_END               0x81010
 #define BIOS_RAM_END                0x90000
 #define RAM_BASE                    0x80000000
 
 # BIOS variables
 #define BIOS_MEM_SIZE_DISCOVERY     0x0
 #define BIOS_MEM_SIZE               0x4
+#define BIOS_KBUF_PTR               0x8
 
 #define a1 x20
 #define a2 x21

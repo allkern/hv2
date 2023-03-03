@@ -11,6 +11,7 @@
 #include "dev/io.hpp"
 #include "dev/pci.hpp"
 #include "dev/i8042.hpp"
+#include "dev/ata.hpp"
 
 #include "elfio/elfio.hpp"
 #include "elfio/elfio_segment.hpp"
@@ -264,6 +265,14 @@ static const char* help_text =
     "For bug reporting please file an issue on:\n"
     "https://github.com/allkern/hv2/issues";
 
+io_device_i8042_t global_i8042;
+
+void global_keydown(uint32_t kcode) {
+    std::printf("keycode=%08x\n", kcode);
+
+    global_i8042.keydown(kcode);
+}
+
 int main(int argc, const char* argv[]) {
     _hv2_log::init("hv2");
 
@@ -360,19 +369,25 @@ int main(int argc, const char* argv[]) {
     io.init(0x40000);
 
     io_device_pci_t pci;
-    io_device_i8042_t i8042;
+    io_device_ata_t ata;
 
     pci_device_t i8042_pci;
     pci_device_t vga_pci;
+    pci_device_t ata_pci;
 
-    i8042_pci.desc = i8042.get_pci_desc();
+    global_i8042.init(cpu);
+    ata.init();
+
+    i8042_pci.desc = global_i8042.get_pci_desc();
     vga_pci.desc = vga.get_pci_desc();
+    ata_pci.desc = ata.get_pci_desc();
 
     pci.register_device(&i8042_pci, 0, 0);
     pci.register_device(&vga_pci, 0, 1);
+    pci.register_device(&ata_pci, 0, 4);
 
     io.register_device(&pci);
-    io.register_device(&i8042);
+    io.register_device(&global_i8042);
 
     hv2_mmu_attach_device(cpu, &bios_rom);
     hv2_mmu_attach_device(cpu, &bios_ram);
@@ -390,6 +405,7 @@ int main(int argc, const char* argv[]) {
     bool fullscreen = cli.get_switch(cli::SW_WINDOW_FULLSCREEN);
 
     screen_init(screen, "VGA screen", vga.get_screen_width(), vga.get_screen_height(), scale, fullscreen);
+    screen_set_keydown_cb(screen, global_keydown);
 
     hv2_clock_t* screen_clk = hv2_clock_create();
 

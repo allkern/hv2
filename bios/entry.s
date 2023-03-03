@@ -17,6 +17,18 @@ BIOS_ENTRY:
     li.w    x1, HV2_CAUSE_SYSCALL
     beq     x0, x1, bios_syscall_handler
 
+    #------------------ EXTERNAL ---------------------#
+    move    at, x0
+    lsr.u   at, 22
+    beq     at, r0, unknown
+    lsr.u   at, 2
+
+.keyb:
+    # Keyboard (i8042) IRQ
+    li.w    x1, 0x01
+    beq     at, x1, bios_handle01
+
+.unknown:
     li.w    a0, !BIOS_UNKNOWN_EXC_MSG
     call    !vga_print
     call    !bios_lock
